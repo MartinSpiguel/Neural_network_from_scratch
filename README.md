@@ -1,0 +1,1 @@
+This is a neural network made from scratch in python. It uses numpy for matrix calculation. Its purpouse is to fit sinusoidal data. It's still incomplete.
