@@ -13,18 +13,19 @@ import matplotlib.pyplot as plt
     -train
     -predict
 '''
-np.random.seed(0)
 
-def generate_data(n):
+def generate_sinusoidal_data(n):
     x = np.linspace(0, 1, n)
     x = x.reshape(len(x), 1)
     y = np.sin(2 * np.pi * x)
     return x, y
 
-x, y = generate_data(100)
+def generate_linear_data(n):
+    x = np.linspace(0, 1, n)
+    x = x.reshape(len(x), 1)
+    y = x
+    return x, y
 
-#plt.plot(x, y)
-#plt.show()
 
 class NeuralNetwork:
     def __init__(self, n_input, n_hidden, n_output, n_layers):
@@ -47,39 +48,42 @@ class NeuralNetwork:
         self.deltas = []
 
         #Initializing weights
-        self.weights.append(np.random.randn(self.n_input, self.n_hidden))
-        for _ in range(self.n_layers - 1):
-            self.weights.append(np.random.randn(self.n_hidden, self.n_hidden))
-        self.weights.append(np.random.randn(self.n_hidden, n_output))
+        self.weights.append(np.random.randn(n_input, n_hidden))
+        for _ in range(n_layers - 1):
+            self.weights.append(np.random.randn(n_hidden, n_hidden))
+        self.weights.append(np.random.randn(n_hidden, n_output))
         #Initializing biases
         self.biases.append(np.zeros((1, n_hidden)))
-        for _ in range(self.n_layers - 1):
+        for _ in range(n_layers - 1):
             self.biases.append(np.zeros((1, n_hidden)))
         self.biases.append(np.zeros((1, n_output)))
         
         #self.biases[-1][0][0] = 2 #Increases all outputs by 2
     
-    def relu(self, x):
+    def tanh(self, x):
         '''
-        ReLU function:
-            If x is positive return x else return 0
+        Activation function
         '''
-        return np.maximum(0, x)
+        #return np.maximum(0, x)
+        return np.tanh(x)
 
-    def relu_derivate(self, x):
-        x[x<=0] = 0
-        x[x>0] = 1
-        return x
+    def tanh_derivate(self, x):
+        return 1 - np.power(self.tanh(x), 2)
 
-    def forward(self, inputs):
+    def forward(self, x):
         '''
         Forward path trough the network
         '''
-        a = inputs
-        for i in range(len(self.weights)):
-            z = np.dot(a, self.weights[i]) + self.biases[i]
-            a = self.relu(z)
-        return a
+        self.z = []
+        self.a = []
+        self.z.append(x)
+        self.a.append(x)
+
+        for i in range(self.n_layers):
+            self.z.append(np.dot(self.a[i], self.weights[i]) + self.biases[i])
+            self.a.append(self.tanh(self.z[i + 1]))
+
+        return self.a[-1]
 
     def mse(self, x, y):
         '''
@@ -88,36 +92,61 @@ class NeuralNetwork:
         '''
         return np.mean(np.power(self.forward(x) - y, 2))
 
-    def backward(self, x, y): #Revisar
-        pred = self.forward(x)
-        error = self.mse(x, y)
-        self.grad_weights.append(error * self.relu_derivate(pred))
+    def backward(self, x, y):
+        '''
+        Backwards path trough the network, backpropagate the error
+        '''
+        self.grad_weights = []
+        self.grad_biases = []
+        self.deltas = []
 
-    def update(self):
-        pass
+        self.deltas.append(self.a[-1] - y) #How wrong is the nn for each pred
 
-    def train(self, x, y, epochs=2000):
-        for _ in range(epochs):
+        self.grad_weights.append(np.dot(self.a[-2].T, self.deltas[-1]))
+        self.grad_biases.append(np.sum(self.deltas[-1], axis=0, keepdims=True))
+
+        for i in range(self.n_layers - 1, 0, -1):
+            self.deltas.append(np.dot(self.deltas[-1], self.weights[i].T) * self.tanh_derivate(self.z[i]))
+            self.grad_weights.append(np.dot(self.a[i - 1].T, self.deltas[-1]))
+            self.grad_biases.append(np.sum(self.deltas[-1], axis=0, keepdims=True))
+
+        self.grad_weights.reverse()
+        self.grad_biases.reverse()
+        self.deltas.reverse()
+
+    def update(self, learning_rate):
+        '''
+        Update weights and biases
+        '''
+        for i in range(self.n_layers):
+            self.weights[i] -= learning_rate * self.grad_weights[i]
+            self.biases[i] -= learning_rate * self.grad_biases[i]
+
+    def train(self, x, y, learning_rate, epochs=5000):
+        '''
+        Train the network
+        '''
+        for i in range(epochs):
             self.forward(x)
-            for i in range(len(self.weights)):
-                self.weights[i] += 0.00007 
-            print(self.mse(x, y))
+            self.backward(x, y)
+            self.update(learning_rate)
+            if i % 100 == 0:
+                print(f'Epoch: {i}   {self.mse(x, y)}')
 
     def predict(self, x):
-        return self.forward(x)
+        y_pred = self.forward(x)
+        return y_pred
 
 
-nn = NeuralNetwork(1, 10, 1, 2)
+x, y = generate_sinusoidal_data(100)
+#x, y = generate_linear_data(100)
 
-nn.train(x, y)
+nn = NeuralNetwork(1, 3, 1, 3)
 
+nn.train(x, y, 0.005, 10000)
 
+y_pred = [np.mean(a) for a in nn.predict(x)]
 
-y_pred = nn.predict(x)
-
-#acuracy = np.mean(y_pred==y)
-#print(acuracy)
-
-plt.plot(x, y_pred)
-plt.plot(x, y)
+plt.plot(x, y_pred, c='red')
+plt.scatter(x, y, c='grey')
 plt.show()
